@@ -19,19 +19,19 @@ Web application fuzzer completo para pentest e bug bounty. Realiza brute-force d
 ## Wordlists e Payloads embutidos
 
 ### Wordlists (`dir`)
-- `common` — 70+ paths genericos (admin, login, api, uploads, backup...)
-- `wp` — WordPress (wp-admin, xmlrpc, plugins, themes...)
-- `api` — Endpoints REST/GraphQL (v1, v2, swagger, graphql...)
-- `php` — Arquivos PHP (config, info, shell, debug...)
-- `devops` — Ferramentas de infraestrutura (jenkins, gitlab, grafana, k8s...)
+- `common` - 70+ paths genericos (admin, login, api, uploads, backup...)
+- `wp` - WordPress (wp-admin, xmlrpc, plugins, themes...)
+- `api` - Endpoints REST/GraphQL (v1, v2, swagger, graphql...)
+- `php` - Arquivos PHP (config, info, shell, debug...)
+- `devops` - Ferramentas de infraestrutura (jenkins, gitlab, grafana, k8s...)
 
 ### Payloads (`param`)
-- `lfi` — 35+ payloads LFI incluindo wrappers php://filter, zip://, data://
-- `ssti` — 25+ payloads para Jinja2, Twig, Freemarker, Smarty, Pebble
-- `ssrf` — 30+ endpoints cloud (AWS IMDS v1/v2, GCP, Azure, localhost bypass)
-- `xss` — 20+ payloads XSS refletido (script, svg, img, event handlers)
-- `sqli` — 30+ payloads SQLi (error-based, time-based blind, UNION)
-- `path_traversal` — 15+ variantes de encoding de path traversal
+- `lfi` - 35+ payloads LFI incluindo wrappers php://filter, zip://, data://
+- `ssti` - 25+ payloads para Jinja2, Twig, Freemarker, Smarty, Pebble
+- `ssrf` - 30+ endpoints cloud (AWS IMDS v1/v2, GCP, Azure, localhost bypass)
+- `xss` - 20+ payloads XSS refletido (script, svg, img, event handlers)
+- `sqli` - 30+ payloads SQLi (error-based, time-based blind, UNION)
+- `path_traversal` - 15+ variantes de encoding de path traversal
 
 ---
 
