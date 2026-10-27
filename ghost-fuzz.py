@@ -43,6 +43,12 @@ from threading import Lock
 from datetime import datetime
 
 try:
+    import colorama
+    colorama.init(autoreset=False)
+except ImportError:
+    pass
+
+try:
     import requests
     import urllib3
     urllib3.disable_warnings()
