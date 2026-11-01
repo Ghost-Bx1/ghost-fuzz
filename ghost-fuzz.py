@@ -1388,6 +1388,8 @@ def main():
         p.add_argument("--proxy", help="Proxy (ex: http://127.0.0.1:8080)")
         p.add_argument("--stealth", action="store_true", help="User-Agent aleatorio")
         p.add_argument("--output", help="Salvar resultados em JSON")
+        p.add_argument("--html-output", metavar="FILE", help="Salvar relatorio HTML")
+        p.add_argument("--no-banner", action="store_true", help="Suprimir banner")
         p.add_argument("--verbose", action="store_true", help="Saida detalhada")
 
     args = parser.parse_args()
@@ -1397,7 +1399,8 @@ def main():
         parser.print_help()
         sys.exit(0)
 
-    print(BANNER)
+    if not getattr(args, "no_banner", False):
+        print(BANNER)
 
     resultados = {
         "alvo": args.url if hasattr(args, "url") else "",
