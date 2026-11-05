@@ -1,6 +1,6 @@
 # Ghost-Fuzz
 
-> Web application fuzzer for directory brute-force, parameter fuzzing, and virtual host enumeration.
+> Web application fuzzer - directory brute-force, parameter fuzzing, and virtual host enumeration.
 
 ```
   GHOST-FUZZ  v1.0.0  |  Web Application Fuzzer
@@ -204,6 +204,23 @@ Improvements planned based on analysis of ffuf, feroxbuster, wfuzz and nuclei:
 | Low | HTTP/2 support | `--http2` flag via urllib3 >= 2.0 for CDN-fronted targets |
 | Low | Additional output formats | `--output-format md\|csv\|html` - HTML as sortable table with status badge colors |
 | Low | YAML mini-templates | nuclei-inspired templates with path/method/matchers loaded via `--templates dir/` |
+
+## Ghost Toolkit
+
+| Tool | Description |
+|------|-------------|
+| [ghost-ad](https://github.com/Ghost-Bx1/ghost-ad) | Active Directory - LDAP, Kerberoasting, AS-REP Roasting, BloodHound-lite |
+| [ghost-cloud](https://github.com/Ghost-Bx1/ghost-cloud) | Cloud Security - AWS, Azure and GCP misconfiguration scanner |
+| [ghost-fuzz](https://github.com/Ghost-Bx1/ghost-fuzz) | Web Fuzzing - directory brute-force, parameter fuzzing, vhost enumeration |
+| [ghost-osint](https://github.com/Ghost-Bx1/ghost-osint) | OSINT - domain, email and IP intelligence from public sources |
+| [ghost-privesc](https://github.com/Ghost-Bx1/ghost-privesc) | Privilege Escalation - Linux privesc checker, 17 vectors, GTFOBins |
+| [ghost-recon](https://github.com/Ghost-Bx1/ghost-recon) | Reconnaissance - DNS, SSL, WAF, subdomain enumeration, email security |
+| [ghost-report](https://github.com/Ghost-Bx1/ghost-report) | Reporting - pentest report generator from any ghost-* JSON output |
+| [ghost-scan](https://github.com/Ghost-Bx1/ghost-scan) | Port Scanner - async TCP/UDP scanner with banner grabbing and CVE correlation |
+| [ghost-shell](https://github.com/Ghost-Bx1/ghost-shell) | Payload Generation - reverse shell and web shell generator, 25+ languages |
+| [ghost-spray](https://github.com/Ghost-Bx1/ghost-spray) | Credential Attacks - password spraying, stuffing, default credential testing |
+
+---
 
 ## Disclaimer
 
