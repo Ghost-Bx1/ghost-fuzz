@@ -57,7 +57,7 @@ except ImportError:
     print("[-] Instale requests: pip install requests")
     sys.exit(1)
 
-VERSAO = "2.1.0"
+VERSAO = "2.2.0"
 
 
 def _build_banner():
@@ -120,9 +120,9 @@ def _build_banner():
         f"{D}{hl}{X}",
         f"{W}By Gh0st-Bx1  {D}{bar}  github.com/Ghost-Bx1{X}",
         f"{D}{hl}{X}",
-        f"{D}dir  param  vhost  header  graphql  jwt{X}",
-        f"{D}params  vuln  --sqli  --xss  --ssrf{X}",
-        f"{D}--lfi  --cors  --redirect  --stealth{X}",
+        f"{D}dir  param  vhost  header  graphql  jwt  vuln{X}",
+        f"{D}--auto-calibrate --filter-words --filter-lines{X}",
+        f"{D}--filter-time --replay-proxy --recurse --ext{X}",
     ]
 
     out = [f"{G}{TL}{eq}{TR}{X}", f"{G}{VB}{sp}{VB}{X}"]
@@ -445,35 +445,12 @@ def _cor_status(status):
 # MODO: DIRECTORY FUZZING
 # ==============================================================================
 
-def _fuzz_dir_worker(args):
-    url_base, caminho, sess, timeout, headers_req, extensoes = args
-    resultados_worker = []
-    alvos = [caminho]
-    if extensoes:
-        for ext in extensoes:
-            ext = ext.strip().lstrip(".")
-            alvos.append(f"{caminho}.{ext}")
-
-    for alvo in alvos:
-        url = f"{url_base.rstrip('/')}/{alvo.lstrip('/')}"
-        try:
-            r = sess.get(url, headers=headers_req, allow_redirects=False, timeout=timeout)
-            status = r.status_code
-            tamanho = len(r.content)
-            resultado = {
-                "url": url, "status": status, "tamanho": tamanho,
-                "tipo": r.headers.get("content-type", ""),
-                "redirect": r.headers.get("location", ""),
-            }
-            resultados_worker.append(resultado)
-        except Exception:
-            pass
-    return resultados_worker
-
 
 def fuzzing_dir(url, wordlist, extensoes=None, threads=50, timeout=5,
                 filter_status=None, filter_size=None, stealth=False,
-                proxy=None, verbose=False, recurse=False, _depth=0):
+                proxy=None, verbose=False, recurse=False, _depth=0,
+                filter_words=None, filter_lines=None, filter_time=None,
+                auto_calibrate=False, replay_proxy=None):
     """Brute-force de diretorios e arquivos."""
     resultado = {"url": url, "encontrados": [], "total": len(wordlist)}
     sess = _criar_sessao(proxy, timeout)
@@ -485,21 +462,75 @@ def fuzzing_dir(url, wordlist, extensoes=None, threads=50, timeout=5,
 
     # Obter tamanho da pagina 404 base para filtrar falsos positivos
     tamanho_404 = None
+    words_404 = None
+    lines_404 = None
     try:
         r404 = sess.get(f"{url.rstrip('/')}/GHOST_FUZZ_404_NONEXISTENT_PATH_12345",
                         allow_redirects=False, timeout=timeout, headers=headers_req)
         tamanho_404 = len(r404.content)
+        body_404 = r404.text
+        words_404 = len(body_404.split())
+        lines_404 = body_404.count("\n")
         if verbose:
-            _log(f"Baseline 404: status={r404.status_code} tamanho={tamanho_404}", "INFO")
+            _log(f"Baseline 404: status={r404.status_code} size={tamanho_404} words={words_404} lines={lines_404}", "INFO")
     except Exception:
         pass
 
-    args_list = [(url, c, sess, timeout, headers_req, extensoes) for c in wordlist]
+    # Auto-calibrate: measure a second baseline hit to detect soft 404s
+    cal_size = None
+    cal_words = None
+    cal_lines = None
+    if auto_calibrate and tamanho_404 is not None:
+        try:
+            r2 = sess.get(f"{url.rstrip('/')}/GHOST_FUZZ_CAL_XK9Z88",
+                          allow_redirects=False, timeout=timeout, headers=headers_req)
+            cal_size = len(r2.content)
+            cal_words = len(r2.text.split())
+            cal_lines = r2.text.count("\n")
+            if verbose:
+                _log(f"Auto-calibrate: size={cal_size} words={cal_words} lines={cal_lines}", "INFO")
+        except Exception:
+            pass
+
+    def _fuzz_dir_worker_ext(caminho):
+        resultados_worker = []
+        alvos = [caminho]
+        if extensoes:
+            for ext in extensoes:
+                ext = ext.strip().lstrip(".")
+                alvos.append(f"{caminho}.{ext}")
+        for alvo in alvos:
+            test_url = f"{url.rstrip('/')}/{alvo.lstrip('/')}"
+            try:
+                t0 = time.time()
+                r = sess.get(test_url, headers=headers_req, allow_redirects=False, timeout=timeout)
+                elapsed = time.time() - t0
+                body = r.text
+                res = {
+                    "url": test_url, "status": r.status_code, "tamanho": len(r.content),
+                    "tipo": r.headers.get("content-type", ""),
+                    "redirect": r.headers.get("location", ""),
+                    "words": len(body.split()), "lines": body.count("\n"),
+                    "time_ms": int(elapsed * 1000),
+                }
+                resultados_worker.append(res)
+                # Replay proxy for confirmed finds
+                if replay_proxy and r.status_code not in [404, 400]:
+                    try:
+                        rp_sess = _criar_sessao(replay_proxy, timeout)
+                        rp_sess.get(test_url, headers=headers_req, allow_redirects=False, timeout=timeout)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        return resultados_worker
+
+    args_list = wordlist
     concluido = 0
     encontrados = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
-        futuros = {executor.submit(_fuzz_dir_worker, a): a for a in args_list}
+        futuros = {executor.submit(_fuzz_dir_worker_ext, c): c for c in args_list}
         for fut in concurrent.futures.as_completed(futuros):
             concluido += 1
             _progresso(concluido, len(wordlist), "Dir:")
@@ -507,6 +538,9 @@ def fuzzing_dir(url, wordlist, extensoes=None, threads=50, timeout=5,
             for res in resultados_worker:
                 status = res["status"]
                 tamanho = res["tamanho"]
+                words = res.get("words", 0)
+                lines = res.get("lines", 0)
+                elapsed = res.get("time_ms", 0)
 
                 # Filtros
                 if filter_status and status not in filter_status:
@@ -515,8 +549,17 @@ def fuzzing_dir(url, wordlist, extensoes=None, threads=50, timeout=5,
                     continue
                 if filter_size and tamanho == filter_size:
                     continue
+                if filter_words is not None and words == filter_words:
+                    continue
+                if filter_lines is not None and lines == filter_lines:
+                    continue
+                if filter_time is not None and elapsed > filter_time:
+                    continue
                 if tamanho_404 and tamanho == tamanho_404 and status == 200:
-                    continue  # Falso positivo
+                    continue
+                if auto_calibrate and cal_size is not None:
+                    if tamanho == cal_size or words == cal_words:
+                        continue
 
                 encontrados.append(res)
 
@@ -1324,7 +1367,14 @@ def main():
     p_dir.add_argument("--ext", help="Extensoes (ex: php,txt,bak,old)")
     p_dir.add_argument("--recurse", action="store_true", help="Fuzzing recursivo")
     p_dir.add_argument("--filter-status", help="Mostrar apenas estes status (ex: 200,301,302)")
-    p_dir.add_argument("--filter-size", type=int, help="Ignorar respostas com este tamanho")
+    p_dir.add_argument("--filter-size", type=int, help="Ignorar respostas com este tamanho (bytes)")
+    p_dir.add_argument("--filter-words", type=int, metavar="N", help="Ignorar respostas com N palavras")
+    p_dir.add_argument("--filter-lines", type=int, metavar="N", help="Ignorar respostas com N linhas")
+    p_dir.add_argument("--filter-time", type=int, metavar="MS", help="Ignorar respostas mais lentas que N ms")
+    p_dir.add_argument("--auto-calibrate", action="store_true", dest="auto_calibrate",
+                       help="Auto-calibragem: detectar soft-404 por duplo baseline")
+    p_dir.add_argument("--replay-proxy", metavar="URL", dest="replay_proxy",
+                       help="Reenviar resultados confirmados para proxy (ex: http://127.0.0.1:8080)")
 
     # Modo PARAM
     p_param = sub.add_parser("param", help="Fuzzing de parametro (LFI/SSTI/SSRF/XSS/SQLi)")
@@ -1439,6 +1489,11 @@ def main():
             filter_status=filter_status, filter_size=args.filter_size,
             stealth=args.stealth, proxy=args.proxy, verbose=args.verbose,
             recurse=args.recurse,
+            filter_words=getattr(args, "filter_words", None),
+            filter_lines=getattr(args, "filter_lines", None),
+            filter_time=getattr(args, "filter_time", None),
+            auto_calibrate=getattr(args, "auto_calibrate", False),
+            replay_proxy=getattr(args, "replay_proxy", None),
         )
         resultados.update(r)
 
