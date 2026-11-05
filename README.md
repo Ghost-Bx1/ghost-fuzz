@@ -184,27 +184,6 @@ python ghost-fuzz.py dir -u https://target.com --threads 20 --timeout 5
 
 ---
 
-## Roadmap
-
-Improvements planned based on analysis of ffuf, feroxbuster, wfuzz and nuclei:
-
-| Priority | Feature | Description |
-|----------|---------|-------------|
-| High | Auto-calibration | Send 3-5 baseline requests to random paths, auto-filter responses matching that profile (`--auto-calibrate`) |
-| High | Recursive scanning | When a directory is found (2xx/301), queue it automatically (`--recursion --recursion-depth N`) |
-| High | Raw request file | Accept Burp Suite exported request file with FUZZ markers (`--request-file req.txt`) |
-| High | Filter by words/lines | Add `--filter-words N` and `--filter-lines N` beyond the current size filter |
-| High | Replay proxy | Forward only matched results to Burp (`--replay-proxy http://127.0.0.1:8080`) |
-| Medium | Filter by response time | Detect time-based blind injections via `--filter-time >500` or `<100` (ms) |
-| Medium | Regex filter/match | `--filter-regex PATTERN` and `--match-regex PATTERN` on response body |
-| Medium | Multiple FUZZ markers | Support FUZZ1 + FUZZ2 with `--mode clusterbomb` or `--mode pitchfork` |
-| Medium | Payload encoding | Per-marker encoding: `--encode FUZZ:urlencode`, `--encode FUZZ:b64` |
-| Medium | Resume from state | Persist word index on SIGINT, resume with `--resume` |
-| Medium | Auto-collect extensions | Extract extensions from found paths and add to next scan round (`--collect-ext`) |
-| Low | HTTP/2 support | `--http2` flag via urllib3 >= 2.0 for CDN-fronted targets |
-| Low | Additional output formats | `--output-format md\|csv\|html` - HTML as sortable table with status badge colors |
-| Low | YAML mini-templates | nuclei-inspired templates with path/method/matchers loaded via `--templates dir/` |
-
 ## Ghost Toolkit
 
 | Tool | Description |
