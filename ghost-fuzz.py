@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Ghost-Fuzz v1.0.0 - Web Application Fuzzer Ofensivo
 =====================================================
