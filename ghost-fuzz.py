@@ -1349,14 +1349,45 @@ def fuzzing_vuln(url, checks, timeout=5, proxy=None, stealth=False, verbose=Fals
 # CLI
 # ==============================================================================
 
+_FUZZ_HELP = """\033[92mComandos disponiveis:\033[0m
+  \033[1mdir\033[0m                Brute-force de diretorios e arquivos (ffuf/dirsearch style)
+  \033[1mparam\033[0m              Fuzzing de parametros GET/POST com payloads (LFI/SSTI/SSRF/XSS/SQLi)
+  \033[1mvhost\033[0m              Virtual host fuzzing via header Host
+  \033[1mparams\033[0m             Descoberta de parametros ocultos
+  \033[1mheaders\033[0m            Fuzzing de headers HTTP (bypass de auth/WAF)
+  \033[1mgraphql\033[0m            Enumeracao e fuzzing de endpoint GraphQL
+  \033[1mjwt\033[0m                Manipulacao e teste de JWT (alg:none, RS256->HS256, brute)
+  \033[1mvuln\033[0m               Scan de vulnerabilidades (SQLi/XSS/LFI/SSRF/CORS/redirect)
+
+\033[92mWordlists embutidas (--builtin):\033[0m
+  common  admin  api  backup  config  php  asp  jsp  all
+
+\033[92mExemplos:\033[0m
+  python ghost-fuzz.py dir -u https://alvo.com -w wordlist.txt
+  python ghost-fuzz.py dir -u https://alvo.com --builtin common --ext php,txt,bak
+  python ghost-fuzz.py dir -u https://alvo.com --builtin all --filter-status 200,301
+  python ghost-fuzz.py param -u "https://alvo.com/page?id=FUZZ" --sqli --xss --lfi
+  python ghost-fuzz.py param -u "https://alvo.com/page?url=FUZZ" --ssrf --callback http://burp.collab
+  python ghost-fuzz.py vhost -u https://alvo.com -d empresa.com -w subdomains.txt
+  python ghost-fuzz.py params -u https://alvo.com/api/user
+  python ghost-fuzz.py headers -u https://alvo.com --header X-Forwarded-For
+  python ghost-fuzz.py graphql -u https://alvo.com/graphql
+  python ghost-fuzz.py jwt -u https://alvo.com/api -t eyJ...
+  python ghost-fuzz.py vuln -u https://alvo.com/page?id=1 --all
+
+\033[2mUse: python ghost-fuzz.py <comando> --help  para opcoes de cada comando\033[0m
+"""
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="ghost-fuzz",
-        description="Ghost-Fuzz v{} - Web Application Fuzzer | By Gh0st-Bx1".format(VERSAO),
-        formatter_class=argparse.RawTextHelpFormatter,
+        description="Ghost-Fuzz v{} - Web Application Fuzzer  |  By Gh0st-Bx1".format(VERSAO),
+        epilog=_FUZZ_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    sub = parser.add_subparsers(dest="modo", help="Modo de fuzzing")
+    sub = parser.add_subparsers(dest="modo", title=argparse.SUPPRESS, metavar="comando")
 
     # Modo DIR
     p_dir = sub.add_parser("dir", help="Brute-force de diretorios e arquivos")
